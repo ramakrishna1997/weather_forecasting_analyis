@@ -1,0 +1,131 @@
+USE weather_forecasting_data;
+SELECT * FROM weather_forecasting_data.weather_forecast_dataset;
+#Rename Date column
+ALTER TABLE weather_forecasting_data.weather_forecast_dataset RENAME COLUMN `ï»¿Date`
+ TO `Date`; 
+ 
+ #SELECT Maximum_temperature_Fahrenheit,`Maximum_heat index_Fahrenheit` from weather_forecasting_data.weather_forecast_dataset 
+ ALTER TABLE weather_forecasting_data.weather_forecast_dataset
+ DROP COLUMN `Date1`;
+ 
+ 
+ 
+
+ 
+
+ #VALIDATE THE QUERY
+ #CHANGE 2022-02-29 to format like other records
+ UPDATE  weather_forecasting_data.weather_forecast_dataset
+ SET `Date`='2/29/2022'
+ WHERE `Date`='2022-02-29';
+ select Average_barometer_inches,Maximum_pressure,Minimum_pressure,(Maximum_pressure-Minimum_Pressure) as 'calc_diff',diff_pressure
+ from weather_forecasting_data.weather_forecast_dataset;
+ 
+ select SUM(`Maximum_humidity_Percent`),SUM(`Minimum_humidity_Percent`),((SUM(`Maximum_humidity_Percent`)-SUM(`Minimum_humidity_Percent`))/COUNT(*) )AS 'Average_humidity_in_Percent',
+ AVG(Average_humidity_Percent)
+ from weather_forecasting_data.weather_forecast_dataset;
+ SELECT Temperature,((Maximum_temperature_Fahrenheit+Minimum_temperature_Fahrenheit)/2) 
+ from weather_forecasting_data.weather_forecast_dataset;
+ SELECT Date,AVG(Temperature),AVG(Average_dewpoint_Fahrenheit),AVG(Average_humidity_Percent)
+ from weather_forecasting_data.weather_forecast_dataset
+ GROUP BY Date
+ ;
+ 
+ 
+ #diff_pressure is a derived column so it can be removed
+ #Month is a derived column so it can be removed
+ CREATE temporary Table Final_table
+ SELECT Date,Temperature,Average_humidity_Percent,Average_dewpoint_Fahrenheit,Average_barometer_inches,Average_windspeed_mph as 'Windspeed',
+ Average_gustspeed_mph as 'Gustspeed',`Average direction_degrees`,Maximum_temperature_Fahrenheit,
+ Minimum_temperature_Fahrenheit,Maximum_humidity_Percent,Minimum_humidity_Percent,Maximum_pressure,
+ Minimum_pressure
+ FROM weather_forecasting_data.weather_forecast_dataset;
+ 
+ #SELECT DISTINCT * FROM weather_forecasting_data.weather_forecast_dataset;
+ SELECT DISTINCT *,count(*) FROM Final_table
+ GROUP BY Date
+ ;
+ 
+  # DUPLICATES
+#There are 1000 unique values in the dataset
+SELECT DISTINCT * FROM weather_forecasting_data.weather_forecast_dataset;
+
+  
+  
+WITH CTE AS(
+SELECT *,ROW_NUMBER() over (Partition by Date,Temperature,Average_humidity_percent,Average_dewpoint_Fahrenheit,Average_barometer_inches,Windspeed,Gustspeed,`Average direction_degrees` Order by Date,Temperature) as 'rn' 
+from Final_table
+)
+select * from cte having rn>1 order by rn desc;
+
+#1.Give the count of the minimum number of days 
+#for the time when temperature reduced
+
+SELECT MIN(count_days)
+FROM (
+  SELECT 
+    t1.Date, 
+    t1.Temperature, 
+    (SELECT COUNT(*)
+     FROM weather_forecast_dataset t2
+     WHERE t2.Date < t1.Date AND t2.Temperature < t1.Temperature) AS count_days
+  FROM 
+    weather_forecast_dataset t1
+) AS temp_diff
+WHERE Temperature < (SELECT Temperature
+                    FROM weather_forecast_dataset t2
+                    WHERE t2.Date < temp_diff.Date
+                    ORDER BY Date DESC
+                    LIMIT 1);
+
+
+#2. Find the temperature as Cold / hot by using the 
+#case and avg of values of the given data set
+SELECT Date,Temperature,(CASE WHEN Temperature>AVG(Temperature) THEN 'HOT' ELSE 'COLD' END) AS 'Hot_or_Cold'
+FROM Final_table
+GROUP BY Date 
+;
+
+#3.Can you check for all 4 consecutive days when the
+#temperature was below 30 Fahrenheit
+SELECT DATE(DATE_SUB(Date,INTERVAL 2 DAY)) AS 'TWO_BEFORE',DATE_SUB(Date,INTERVAL 1 DAY) AS 'ONE_BEFORE',
+Date AS 'TODAY',DATE_ADD(Date,INTERVAL 1 DAY) AS 'ONE_AFTER',Temperature 
+FROM Final_table WHERE Temperature<30;
+#4.Can you find the maximum number of days for which temperature dropped
+SELECT MAX(count_days)
+FROM (
+  SELECT 
+    t1.Date, 
+    t1.Temperature, 
+    (SELECT COUNT(*)
+     FROM weather_forecast_dataset t2
+     WHERE t2.Date < t1.Date AND t2.Temperature < t1.Temperature) AS count_days
+  FROM 
+    weather_forecast_dataset t1
+) AS temp_diff
+WHERE Temperature < (SELECT Temperature
+                    FROM weather_forecast_dataset t2
+                    WHERE t2.Date < temp_diff.Date
+                    ORDER BY Date DESC
+                    LIMIT 1);
+
+#5.Can you find the average of average humidity from the dataset 
+SELECT DATE,AVG(Average_humidity_Percent) AS 'Mean_Average_Humidity' FROM
+Final_table
+GROUP BY Date
+ORDER BY AVG(Average_humidity_Percent);
+
+#6.Use the GROUP BY clause on the Date column and make a query 
+#to fetch details for average windspeed ( which is now windspeed done in task 3 )
+SELECT Date,AVG(Windspeed) AS 'Average_Windspeed' FROM Final_table
+GROUP BY Date
+ORDER BY AVG(Windspeed)
+;
+#8.If the maximum gust speed increases from 55mph, 
+#fetch the details for the next 4 days
+SELECT *,DATE_ADD(Date,INTERVAL 4 DAY) FROM Final_table WHERE Gustspeed>55;
+select *  from Final_table where Date='4/1/2022';
+
+#9.Find the number of days when the temperature went below 0 degrees Celsius
+SELECT DISTINCT COUNT(*) FROM Final_table WHERE Temperature<32
+;
